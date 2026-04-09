@@ -56,6 +56,37 @@ class PauliHamiltonian:
 
         return PauliHamiltonian(new_terms)
 
+    def __add__(self, other):
+
+        if self.num_qubits != other.num_qubits:
+            raise ValueError("Hamiltonians must act on same number of qubits")
+    
+        result = defaultdict(complex)
+    
+        for p in self.terms:
+            result[p.string] += p.coeff
+    
+        for p in other.terms:
+            result[p.string] += p.coeff
+    
+        new_terms = [
+            PauliString(s, c)
+            for s, c in result.items()
+            if abs(c) > 1e-12
+        ]
+    
+        return PauliHamiltonian(new_terms)
+
+    def scale(self, scalar):
+
+        new_terms = [
+            PauliString(p.string, p.coeff * scalar)
+            for p in self.terms
+        ]
+    
+        return PauliHamiltonian(new_terms)
+
+
 
 @dataclass(frozen=True)
 class PauliString:
@@ -93,3 +124,5 @@ class PauliString:
 
     def to_qiskit(self):
         return SparsePauliOp(self.string, coeffs=[self.coeff])
+
+    

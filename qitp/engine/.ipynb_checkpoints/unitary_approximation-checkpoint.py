@@ -27,34 +27,29 @@ class UnitaryApproximation:
             for j in range(i, self.m):
 
                 op = self.products[i][j]
-                val = state.expectation_value(op).real
-
-                S[i, j] = val
-                S[j, i] = val
+                val = state.expectation_value(op)
+                S_ij = 0.5 * (val + np.conjugate(val))  # enforce Hermitian symmetry
+                S[i, j] = S_ij.real
+                S[j, i] = S_ij.real
 
         return S
 
     def compute_b(self, state, H):
-        """
-        b_i = -Re(<psi | A_i H | psi>)
-        """
+    
         b = np.zeros(self.m)
-
+    
         for i in range(self.m):
-
-            val = 0.0
-
-            for Pk in H.terms:
-
-                # PauliString -> SparsePauliOp
-                Hk = Pk.to_qiskit()
-
+    
+            total = 0.0
+    
+            for p in H.terms:
+                Hk = p.to_qiskit()
                 op = self.pauli_basis[i] @ Hk
-
-                val += Pk.coeff * state.expectation_value(op)
-
-            b[i] = -val.real
-
+                val = state.expectation_value(op)
+                total += p.coeff * val
+    
+            b[i] = -np.real(total)
+    
         return b
 
     def solve(self, S, b, dt):
