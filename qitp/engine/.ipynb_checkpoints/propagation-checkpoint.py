@@ -3,6 +3,8 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit.library import PauliEvolutionGate
 
+from scipy.linalg import expm
+from scipy.linalg import pinv
 
 class QITEPropagation:
 
@@ -17,40 +19,82 @@ class QITEPropagation:
 
         self.num_qubits = hamiltonian.num_qubits
 
-    def step(self, state, dt):
-    
+    def step(self, circuit, state, dt):
+
         G = self.build_constrained_generator(state)
     
-        S = self.approx.compute_S(state)
-        b = self.approx.compute_b(state, G)
+        G_matrix = G.to_matrix()
     
-        a = self.approx.solve(S, b, dt)
+        observables, g_products = (
+            self.approx.build_measurement_cache(G)
+        )
+        
+        measured = self.approx.measure_cache(
+            circuit,
+            self.backend,
+            observables
+        )
+        
+        S = self.approx.compute_S(
+            measured
+        )
+        
+        b = self.approx.compute_b(
+            measured,
+            g_products
+        )
     
-        U_circuit = self.build_unitary(a)
+        a = self.approx.solve(S, b)
     
-        return state.evolve(U_circuit)
+        U = self.build_unitary(a, dt)
+    
+        circuit = circuit.compose(U)
+        #circuit = QuantumCircuit(self.num_qubits)
+    
+        #circuit.initialize(
+        #    state.data,
+        #    range(self.num_qubits)
+        #)
+    
+        #circuit.compose(
+        #    U,
+        #    inplace=True
+        #)
+    
+        state = state.evolve(U)
+    
+        return circuit, state
 
-    def build_unitary(self, coeffs):
+    def build_unitary(self, coeffs, dt):
 
-        paulis = []
-        weights = []
-
-        for c, P in zip(coeffs, self.approx.pauli_basis):
-
+        op = None
+    
+        for i, c in enumerate(coeffs):
+    
             if abs(c) < 1e-12:
                 continue
-        
-            for pauli, coeff in zip(P.paulis, P.coeffs):
-                paulis.append(pauli)
-                weights.append(c * coeff)
-
-        op = SparsePauliOp(paulis, weights)
-
-        evo = PauliEvolutionGate(op, time=1.0)
-
+    
+            term = c * self.approx.basis.operator(i)
+    
+            if op is None:
+                op = term
+            else:
+                op += term
+    
+        if op is None:
+    
+            return QuantumCircuit(self.num_qubits)
+    
         qc = QuantumCircuit(self.num_qubits)
-        qc.append(evo, range(self.num_qubits))
-
+    
+        qc.append(
+            PauliEvolutionGate(
+                op,
+                time=dt
+            ),
+            range(self.num_qubits)
+        )
+    
         return qc
 
     def build_constrained_generator(self, state):
@@ -63,7 +107,7 @@ class QITEPropagation:
         G = self.H
     
         for b_i, B_i in zip(beta, self.constraints):
-            G = G + B_i.scale(b_i)
+            G = G + b_i * B_i
     
         return G
 
@@ -73,15 +117,58 @@ class QITEPropagation:
         m = len(self.constraints)
     
         if m == 0:
-            return []
+            return np.array([])
+    
+        psi = state.data
     
         Gmat = np.zeros((m, m))
         gamma = np.zeros(m)
     
+        HPsi = self.H.to_matrix() @ psi
+    
         for i, Bi in enumerate(self.constraints):
+
+            HPsi = self.H.to_matrix() @ psi
+        
+            BiPsi = Bi.to_matrix() @ psi
+        
+            gamma[i] = -np.real(
+                np.vdot(HPsi, BiPsi)
+            )
+        
             for j, Bj in enumerate(self.constraints):
-                Gmat[i, j] = np.real(state.expectation_value((Bi @ Bj).operator))
+        
+                BjPsi = Bj.to_matrix() @ psi
+        
+                Gmat[i, j] = np.real(
+                    np.vdot(BiPsi, BjPsi)
+                )
     
-            gamma[i] = -np.real(state.expectation_value((self.H @ Bi).operator))
+        # Diagonalizzazione della Gram matrix
+        eigvals, eigvecs = np.linalg.eigh(Gmat)
     
-        return np.linalg.lstsq(Gmat, gamma, rcond=None)[0]
+        # Tolleranza relativa
+        tol = 1e-12 * max(np.max(np.abs(eigvals)), 1.0)
+    
+        # Pseudoinversa spettrale
+        inv_eigs = np.zeros_like(eigvals)
+    
+        mask = eigvals > tol
+    
+        inv_eigs[mask] = 1.0 / eigvals[mask]
+    
+        Gplus = (
+            eigvecs
+            @ np.diag(inv_eigs)
+            @ eigvecs.T
+        )
+    
+        beta = Gplus @ gamma
+    
+        return beta
+
+    def constrained_generator_matrix(self, state):
+
+        G = self.build_constrained_generator(state)
+    
+        return G.to_matrix()

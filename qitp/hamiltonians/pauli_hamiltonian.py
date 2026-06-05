@@ -74,9 +74,19 @@ class PauliHamiltonian:
             for s, c in result.items()
             if abs(c) > 1e-12
         ]
-    
+        
+        if len(new_terms) == 0:
+            return PauliHamiltonian.zero(self.num_qubits)
+        
         return PauliHamiltonian(new_terms)
 
+    def __sub__(self, other):
+
+        if self.num_qubits != other.num_qubits:
+            raise ValueError("Hamiltonians must act on same number of qubits")
+    
+        return self + other.scale(-1)
+    
     def scale(self, scalar):
 
         new_terms = [
@@ -85,6 +95,21 @@ class PauliHamiltonian:
         ]
     
         return PauliHamiltonian(new_terms)
+
+    def to_matrix(self):
+        return self.operator.to_matrix()
+
+    @classmethod
+    def zero(cls, num_qubits):
+
+        return cls([
+            PauliString("I" * num_qubits, 0.0)
+        ])
+
+    @property
+    def is_zero(self):
+    
+        return all(abs(p.coeff) < 1e-12 for p in self.terms)
 
 
 
