@@ -1,6 +1,7 @@
 from qiskit_aer import AerSimulator
 from qiskit.quantum_info import Statevector
 from qiskit.primitives import StatevectorEstimator
+from qiskit_aer.primitives import EstimatorV2
 
 import numpy as np
 
@@ -10,11 +11,7 @@ class SimulatorBackend:
     def __init__(self):
 
         self.backend = AerSimulator(method="statevector")
-        self.estimator = StatevectorEstimator()
-
-    def run(self, circuit):
-
-        return Statevector.from_instruction(circuit)
+        self.estimator = EstimatorV2()
 
     def expectation(
         self,

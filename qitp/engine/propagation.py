@@ -2,9 +2,9 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit.library import PauliEvolutionGate
+from qiskit.synthesis import LieTrotter
 
-from scipy.linalg import expm
-from scipy.linalg import pinv
+
 
 class QITEPropagation:
 
@@ -21,7 +21,7 @@ class QITEPropagation:
 
     def step(self, circuit, state, dt):
 
-        G = self.build_constrained_generator(state)
+        G = self.build_constrained_generator(circuit)
     
         G_matrix = G.to_matrix()
     
@@ -49,19 +49,9 @@ class QITEPropagation:
         U = self.build_unitary(a, dt)
     
         circuit = circuit.compose(U)
-        #circuit = QuantumCircuit(self.num_qubits)
-    
-        #circuit.initialize(
-        #    state.data,
-        #    range(self.num_qubits)
-        #)
-    
-        #circuit.compose(
-        #    U,
-        #    inplace=True
-        #)
-    
-        state = state.evolve(U)
+
+        if state is not None:
+            state = state.evolve(U)
     
         return circuit, state
 
@@ -90,19 +80,23 @@ class QITEPropagation:
         qc.append(
             PauliEvolutionGate(
                 op,
-                time=dt
+                time=dt,
+                synthesis=LieTrotter(reps=2)
             ),
             range(self.num_qubits)
         )
     
-        return qc
+        return qc.decompose()
 
-    def build_constrained_generator(self, state):
+    def build_constrained_generator(self, circuit):
     
         if not self.constraints:
             return self.H
     
-        beta = self.compute_betas(state)
+        beta = self.compute_betas(
+            circuit,
+            self.backend
+        )
     
         G = self.H
     
@@ -112,50 +106,151 @@ class QITEPropagation:
         return G
 
 
-    def compute_betas(self, state):
-
+    def compute_betas(
+        self,
+        circuit,
+        backend
+    ):
+    
         m = len(self.constraints)
     
         if m == 0:
             return np.array([])
     
-        psi = state.data
+        labels_needed = set()
     
-        Gmat = np.zeros((m, m))
-        gamma = np.zeros(m)
+        gram_products = [
+            [None] * m
+            for _ in range(m)
+        ]
     
-        HPsi = self.H.to_matrix() @ psi
+        h_products = [None] * m
+    
+        #
+        # Costruzione operatori
+        #
     
         for i, Bi in enumerate(self.constraints):
-
-            HPsi = self.H.to_matrix() @ psi
-        
-            BiPsi = Bi.to_matrix() @ psi
-        
-            gamma[i] = -np.real(
-                np.vdot(HPsi, BiPsi)
-            )
-        
-            for j, Bj in enumerate(self.constraints):
-        
-                BjPsi = Bj.to_matrix() @ psi
-        
-                Gmat[i, j] = np.real(
-                    np.vdot(BiPsi, BjPsi)
+    
+            op = (
+                self.H @ Bi
+            ).simplify()
+    
+            h_products[i] = op
+    
+            for pauli in op.paulis:
+    
+                labels_needed.add(
+                    pauli.to_label()
                 )
     
-        # Diagonalizzazione della Gram matrix
+            for j, Bj in enumerate(self.constraints):
+    
+                op = (
+                    Bi @ Bj
+                ).simplify()
+    
+                gram_products[i][j] = op
+    
+                for pauli in op.paulis:
+    
+                    labels_needed.add(
+                        pauli.to_label()
+                    )
+    
+        #
+        # Misura unica
+        #
+    
+        labels = list(labels_needed)
+    
+        observables = [
+            SparsePauliOp(
+                label,
+                coeffs=[1.0]
+            )
+            for label in labels
+        ]
+    
+        values = backend.expectations(
+            circuit,
+            observables
+        )
+    
+        measured = dict(
+            zip(labels, values)
+        )
+    
+        #
+        # Gamma
+        #
+    
+        gamma = np.zeros(m)
+    
+        for i, op in enumerate(h_products):
+    
+            value = 0.0j
+    
+            for pauli, coeff in zip(
+                op.paulis,
+                op.coeffs
+            ):
+    
+                value += (
+                    coeff
+                    * measured[
+                        pauli.to_label()
+                    ]
+                )
+    
+            gamma[i] = -np.real(value)
+    
+        #
+        # Gram
+        #
+    
+        Gmat = np.zeros((m, m))
+    
+        for i in range(m):
+    
+            for j in range(m):
+    
+                op = gram_products[i][j]
+    
+                value = 0.0j
+    
+                for pauli, coeff in zip(
+                    op.paulis,
+                    op.coeffs
+                ):
+    
+                    value += (
+                        coeff
+                        * measured[
+                            pauli.to_label()
+                        ]
+                    )
+    
+                Gmat[i, j] = np.real(value)
+    
+        #
+        # Solve
+        #
+    
         eigvals, eigvecs = np.linalg.eigh(Gmat)
     
-        # Tolleranza relativa
-        tol = 1e-12 * max(np.max(np.abs(eigvals)), 1.0)
+        tol = 1e-12 * max(
+            np.max(np.abs(eigvals)),
+            1.0
+        )
     
-        # Pseudoinversa spettrale
         inv_eigs = np.zeros_like(eigvals)
     
         mask = eigvals > tol
     
-        inv_eigs[mask] = 1.0 / eigvals[mask]
+        inv_eigs[mask] = (
+            1.0 / eigvals[mask]
+        )
     
         Gplus = (
             eigvecs
@@ -167,8 +262,8 @@ class QITEPropagation:
     
         return beta
 
-    def constrained_generator_matrix(self, state):
+    def constrained_generator_matrix(self, circuit):
 
-        G = self.build_constrained_generator(state)
+        G = self.build_constrained_generator(circuit)
     
         return G.to_matrix()
