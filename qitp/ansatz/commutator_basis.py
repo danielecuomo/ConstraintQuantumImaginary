@@ -113,3 +113,104 @@ class CommutatorBasis(OperatorBasis):
                 break
 
         return cls(operators)
+
+
+    @classmethod
+    def from_rotations(
+        cls,
+        hamiltonian,
+        rotations,
+        depth
+    ):
+    
+        nqubits = hamiltonian.num_qubits
+    
+        frontier = cls.dressed_generators(
+            nqubits,
+            rotations
+        )
+    
+        basis = list(frontier)
+    
+        for _ in range(depth):
+    
+            new_frontier = []
+    
+            for op in frontier:
+    
+                comm = cls.commutator(
+                    hamiltonian,
+                    op
+                )
+    
+                if len(comm.paulis):
+    
+                    new_frontier.append(comm)
+    
+            basis.extend(new_frontier)
+    
+            frontier = new_frontier
+    
+        return cls(basis)
+    
+
+    import numpy as np
+    from qiskit.quantum_info import SparsePauliOp
+    
+    @classmethod
+    def dress(
+        cls,
+        operator,
+        generator,
+        theta
+    ):
+        AP = (generator @ operator).simplify()
+        PA = (operator @ generator).simplify()
+    
+        #
+        # commutano
+        #
+    
+        if AP == PA:
+            return operator
+    
+        #
+        # anticommutano
+        #
+    
+        return (
+            np.cos(2 * theta) * operator
+            - np.sin(2 * theta) * (1j * AP)
+        ).simplify()
+    
+    @classmethod
+    def dressed_generators(
+        cls,
+        nqubits,
+        rotations
+    ):
+        generators = [
+            SparsePauliOp(
+                "I" * i
+                + "Z"
+                + "I" * (nqubits - i - 1),
+                coeffs=[1.0]
+            )
+            for i in range(nqubits)
+        ]
+    
+        for rot in rotations:
+    
+            A = rot["generator"]
+            theta = rot["theta"]
+    
+            generators = [
+                cls.dress(
+                    op,
+                    A,
+                    theta
+                )
+                for op in generators
+            ]
+    
+        return generators
