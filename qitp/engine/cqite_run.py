@@ -4,14 +4,13 @@ def run_qite(
     H,
     Mz,
     dt,
-    nsteps
+    nsteps,
+    state = None
 ):
     import numpy as np
 
     energies = []
     magnetizations = []
-
-    state = None
 
     for _ in range(nsteps):
 

@@ -23,7 +23,7 @@ class QITEPropagation:
 
         G = self.build_constrained_generator(circuit)
     
-        G_matrix = G.to_matrix()
+        G_matrix = G.to_matrix() #Esponenziale????
     
         observables, g_products = (
             self.approx.build_measurement_cache(G)
@@ -47,11 +47,29 @@ class QITEPropagation:
         a = self.approx.solve(S, b)
     
         U = self.build_unitary(a, dt)
+        
+        #circuit = QuantumCircuit(self.num_qubits)
     
-        circuit = circuit.compose(U)
+        #circuit.initialize(        #circuit.initialize(
+        #    state.data,
+        #    range(self.num_qubits)
+        #)
+    
+        #circuit.compose(        #circuit.compose(
+        #    U,
+        #    inplace=True
+        #)
 
         if state is not None:
             state = state.evolve(U)
+            circuit = QuantumCircuit(self.num_qubits)
+    
+            circuit.initialize(
+            state.data,
+            range(self.num_qubits)
+            )
+    
+        circuit = circuit.compose(U)
     
         return circuit, state
 

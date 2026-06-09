@@ -120,17 +120,29 @@ class CommutatorBasis(OperatorBasis):
         cls,
         hamiltonian,
         rotations,
-        depth
+        depth=1
     ):
     
         nqubits = hamiltonian.num_qubits
     
-        frontier = cls.dressed_generators(
+        operators = []
+        frontier = []
+    
+        for op in cls.dressed_generators(
             nqubits,
             rotations
-        )
+        ):
     
-        basis = list(frontier)
+            op = op.simplify()
+    
+            if not cls.linearly_independent(
+                op,
+                operators
+            ):
+                continue
+    
+            operators.append(op)
+            frontier.append(op)
     
         for _ in range(depth):
     
@@ -143,15 +155,27 @@ class CommutatorBasis(OperatorBasis):
                     op
                 )
     
-                if len(comm.paulis):
+                if comm is None:
+                    continue
     
-                    new_frontier.append(comm)
+                comm = comm.simplify()
+                
     
-            basis.extend(new_frontier)
+                if not cls.linearly_independent(
+                    comm,
+                    operators
+                ):
+                    continue
+    
+                operators.append(comm)
+                new_frontier.append(comm)
     
             frontier = new_frontier
     
-        return cls(basis)
+            if not frontier:
+                break
+    
+        return cls(operators)
     
 
     import numpy as np
@@ -214,3 +238,76 @@ class CommutatorBasis(OperatorBasis):
             ]
     
         return generators
+
+    @staticmethod
+    def pauli_vector(op):
+    
+        return {
+            p.to_label(): c
+            for p, c in zip(
+                op.paulis,
+                op.coeffs
+            )
+        }
+
+    @classmethod
+    def linearly_independent(
+        cls,
+        op,
+        basis,
+        tol=1e-12
+    ):
+    
+        if not basis:
+            return True
+    
+        operators = basis + [op]
+    
+        labels = sorted({
+            p.to_label()
+            for O in operators
+            for p in O.paulis
+        })
+    
+        M = np.zeros(
+            (
+                len(operators),
+                len(labels)
+            ),
+            dtype=complex
+        )
+    
+        label_index = {
+            label: i
+            for i, label in enumerate(labels)
+        }
+    
+        for row, O in enumerate(operators):
+
+            for pauli, coeff in zip(
+                O.paulis,
+                O.coeffs
+            ):
+        
+                col = label_index[
+                    pauli.to_label()
+                ]
+        
+                M[row, col] = coeff
+        
+            norm = np.linalg.norm(M[row])
+        
+            if norm > tol:
+                M[row] /= norm
+    
+        rank_before = np.linalg.matrix_rank(
+            M[:-1],
+            tol
+        )
+    
+        rank_after = np.linalg.matrix_rank(
+            M,
+            tol
+        )
+    
+        return rank_after > rank_before
