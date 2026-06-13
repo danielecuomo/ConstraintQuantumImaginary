@@ -99,6 +99,13 @@ class CommutatorBasis(OperatorBasis):
                     hamiltonian,
                     op
                 )
+                coeff_norm = np.linalg.norm(comm.coeffs)
+                
+                if coeff_norm > 1e-12:
+                    comm = SparsePauliOp(
+                        comm.paulis,
+                        coeffs=comm.coeffs / coeff_norm
+                    )
     
                 if comm is None:
                     continue
@@ -281,11 +288,26 @@ class CommutatorBasis(OperatorBasis):
     
         op = op.simplify()
     
-        if not np.allclose(
-            np.imag(op.coeffs),
-            0.0,
-            atol=1e-12
-        ):
+        imag_coeffs = np.imag(op.coeffs)
+        idx = np.argmax(np.abs(imag_coeffs))
+        max_imag = np.abs(imag_coeffs[idx])
+    
+        if max_imag > 1e-7:
+    
+            print(
+                f"[clean] max imaginary coefficient = {max_imag:.3e}"
+            )
+    
+            print(
+                "offending Pauli:",
+                op.paulis[idx].to_label()
+            )
+    
+            print(
+                "coefficient:",
+                op.coeffs[idx]
+            )
+    
             raise ValueError(
                 "Non-hermitian operator generated"
             )
