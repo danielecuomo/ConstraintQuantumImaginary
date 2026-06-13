@@ -4,11 +4,17 @@ from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.synthesis import LieTrotter
 
+from qitp.ansatz.commutator_basis import (
+    CommutatorBasis
+)
+
+from qitp.engine.unitary_approximation import UnitaryApproximation
+
 
 
 class QITEPropagation:
 
-    def __init__(self, hamiltonian, approx, backend):
+    def __init__(self, hamiltonian, approx, backend, seeds, depth):
 
         self.H = hamiltonian
         self.approx = approx
@@ -16,6 +22,8 @@ class QITEPropagation:
         
         self.constraints = []
         self.targets = []
+        self.seeds = seeds
+        self.depth = depth
 
         self.num_qubits = hamiltonian.num_qubits
 
@@ -24,7 +32,18 @@ class QITEPropagation:
         G = self.build_constrained_generator(circuit)
     
         G_matrix = G.to_matrix() #Esponenziale????
+
+        basis = CommutatorBasis.from_seed(
+            hamiltonian=G,
+            seeds=self.seeds,
+            depth=self.depth
+        )
     
+        self.approx = UnitaryApproximation(
+            basis
+        )
+
+ 
         observables, g_products = (
             self.approx.build_measurement_cache(G)
         )
@@ -47,27 +66,15 @@ class QITEPropagation:
         a = self.approx.solve(S, b)
     
         U = self.build_unitary(a, dt)
-        
-        #circuit = QuantumCircuit(self.num_qubits)
-    
-        #circuit.initialize(        #circuit.initialize(
-        #    state.data,
-        #    range(self.num_qubits)
-        #)
-    
-        #circuit.compose(        #circuit.compose(
-        #    U,
-        #    inplace=True
-        #)
 
         if state is not None:
-            state = state.evolve(U)
             circuit = QuantumCircuit(self.num_qubits)
     
             circuit.initialize(
             state.data,
             range(self.num_qubits)
             )
+            state = state.evolve(U)
     
         circuit = circuit.compose(U)
     
@@ -277,7 +284,6 @@ class QITEPropagation:
         )
     
         beta = Gplus @ gamma
-    
         return beta
 
     def constrained_generator_matrix(self, circuit):

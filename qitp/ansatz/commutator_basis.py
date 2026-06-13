@@ -38,7 +38,7 @@ class CommutatorBasis(OperatorBasis):
         if len(C.paulis) == 0:
             return None
 
-        return (-1j * C).simplify()
+        return CommutatorBasis.clean(-1j * C)
 
     @staticmethod
     def canonical(op):
@@ -64,76 +64,17 @@ class CommutatorBasis(OperatorBasis):
         seeds,
         depth=1
     ):
-
+    
         operators = []
         frontier = []
-        seen = set()
-
+    
+        #
+        # seed
+        #
+    
         for op in seeds:
-
-            op = op.simplify()
-
-            key = cls.canonical(op)
-
-            if key in seen:
-                continue
-
-            seen.add(key)
-
-            operators.append(op)
-            frontier.append(op)
-
-        for _ in range(depth):
-
-            new_frontier = []
-
-            for op in frontier:
-
-                comm = cls.commutator(
-                    hamiltonian,
-                    op
-                )
-
-                if comm is None:
-                    continue
-
-                key = cls.canonical(comm)
-
-                if key in seen:
-                    continue
-
-                seen.add(key)
-
-                operators.append(comm)
-                new_frontier.append(comm)
-
-            frontier = new_frontier
-
-            if not frontier:
-                break
-
-        return cls(operators)
-
-
-    @classmethod
-    def from_rotations(
-        cls,
-        hamiltonian,
-        rotations,
-        depth=1
-    ):
     
-        nqubits = hamiltonian.num_qubits
-    
-        operators = []
-        frontier = []
-    
-        for op in cls.dressed_generators(
-            nqubits,
-            rotations
-        ):
-    
-            op = op.simplify()
+            op = cls.clean(op)
     
             if not cls.linearly_independent(
                 op,
@@ -144,6 +85,10 @@ class CommutatorBasis(OperatorBasis):
             operators.append(op)
             frontier.append(op)
     
+        #
+        # commutator hierarchy
+        #
+    
         for _ in range(depth):
     
             new_frontier = []
@@ -158,8 +103,7 @@ class CommutatorBasis(OperatorBasis):
                 if comm is None:
                     continue
     
-                comm = comm.simplify()
-                
+                comm = cls.clean(comm)
     
                 if not cls.linearly_independent(
                     comm,
@@ -176,6 +120,26 @@ class CommutatorBasis(OperatorBasis):
                 break
     
         return cls(operators)
+
+
+    @classmethod
+    def from_rotations(
+        cls,
+        hamiltonian,
+        rotations,
+        depth=1
+    ):
+    
+        seeds = cls.dressed_generators(
+            hamiltonian.num_qubits,
+            rotations
+        )
+    
+        return cls.from_seed(
+            hamiltonian,
+            seeds,
+            depth=depth
+        )
     
 
     import numpy as np
@@ -202,10 +166,10 @@ class CommutatorBasis(OperatorBasis):
         # anticommutano
         #
     
-        return (
+        return CommutatorBasis.clean(
             np.cos(2 * theta) * operator
             - np.sin(2 * theta) * (1j * AP)
-        ).simplify()
+        )
     
     @classmethod
     def dressed_generators(
@@ -311,3 +275,24 @@ class CommutatorBasis(OperatorBasis):
         )
     
         return rank_after > rank_before
+
+    @classmethod
+    def clean(cls, op):
+    
+        op = op.simplify()
+    
+        if not np.allclose(
+            np.imag(op.coeffs),
+            0.0,
+            atol=1e-12
+        ):
+            raise ValueError(
+                "Non-hermitian operator generated"
+            )
+    
+        return SparsePauliOp(
+            op.paulis,
+            coeffs=np.real(op.coeffs)
+        ).simplify()
+
+    
