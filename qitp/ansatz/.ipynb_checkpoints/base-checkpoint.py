@@ -19,3 +19,7 @@ class OperatorBasis(ABC):
     @abstractmethod
     def operator(self, i):
         pass
+
+    @abstractmethod
+    def from_seed(hamiltonian, seeds, depth):
+        pass

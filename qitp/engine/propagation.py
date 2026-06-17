@@ -1,12 +1,6 @@
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp
-from qiskit.circuit.library import PauliEvolutionGate
-from qiskit.synthesis import LieTrotter
-
-from qitp.ansatz.commutator_basis import (
-    CommutatorBasis
-)
 
 from qitp.engine.unitary_approximation import UnitaryApproximation
 
@@ -14,7 +8,7 @@ from qitp.engine.unitary_approximation import UnitaryApproximation
 
 class QITEPropagation:
 
-    def __init__(self, hamiltonian, approx, backend, seeds, depth):
+    def __init__(self, hamiltonian, backend, approx):
 
         self.H = hamiltonian
         self.approx = approx
@@ -22,8 +16,9 @@ class QITEPropagation:
         
         self.constraints = []
         self.targets = []
-        self.seeds = seeds
-        self.depth = depth
+        #self.seeds = seeds
+        #self.depth = depth
+        #self.basis_class = basis_class
 
         self.num_qubits = hamiltonian.num_qubits
 
@@ -31,17 +26,15 @@ class QITEPropagation:
 
         G = self.build_constrained_generator(circuit)
     
-        G_matrix = G.to_matrix() #Esponenziale????
-
-        basis = CommutatorBasis.from_seed(
-            hamiltonian=G,
-            seeds=self.seeds,
-            depth=self.depth
-        )
+        #basis = self.basis_class.from_seed(
+        #    hamiltonian=G,
+        #    seeds=self.seeds,
+        #    depth=self.depth
+        #)
     
-        self.approx = UnitaryApproximation(
-            basis
-        )
+        #self.approx = UnitaryApproximation(
+        #    basis
+        #)
 
  
         observables, g_products = (
@@ -63,9 +56,19 @@ class QITEPropagation:
             g_products
         )
     
-        a = self.approx.solve(S, b)
+        #a = self.approx.solve(S, b)
+        direction, alpha = self.approx.solve_direction(
+            S,
+            b
+        )
+        
+        effective_dt = (
+            dt * alpha
+        )
+        
+        
     
-        U = self.build_unitary(a, dt)
+        U = self.approx.build_unitary(direction, effective_dt)
 
         if state is not None:
             circuit = QuantumCircuit(self.num_qubits)
@@ -80,38 +83,7 @@ class QITEPropagation:
     
         return circuit, state
 
-    def build_unitary(self, coeffs, dt):
-
-        op = None
     
-        for i, c in enumerate(coeffs):
-    
-            if abs(c) < 1e-12:
-                continue
-    
-            term = c * self.approx.basis.operator(i)
-    
-            if op is None:
-                op = term
-            else:
-                op += term
-    
-        if op is None:
-    
-            return QuantumCircuit(self.num_qubits)
-    
-        qc = QuantumCircuit(self.num_qubits)
-    
-        qc.append(
-            PauliEvolutionGate(
-                op,
-                time=dt,
-                synthesis=LieTrotter(reps=2)
-            ),
-            range(self.num_qubits)
-        )
-    
-        return qc.decompose()
 
     def build_constrained_generator(self, circuit):
     
@@ -291,3 +263,5 @@ class QITEPropagation:
         G = self.build_constrained_generator(circuit)
     
         return G.to_matrix()
+
+    

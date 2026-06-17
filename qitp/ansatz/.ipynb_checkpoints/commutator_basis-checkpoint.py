@@ -264,7 +264,7 @@ class CommutatorBasis(OperatorBasis):
                     pauli.to_label()
                 ]
         
-                M[row, col] = coeff
+                M[row, col] = 1.0#coeff
         
             norm = np.linalg.norm(M[row])
         
@@ -292,7 +292,7 @@ class CommutatorBasis(OperatorBasis):
         idx = np.argmax(np.abs(imag_coeffs))
         max_imag = np.abs(imag_coeffs[idx])
     
-        if max_imag > 1e-7:
+        if max_imag > 1e-6:
     
             print(
                 f"[clean] max imaginary coefficient = {max_imag:.3e}"

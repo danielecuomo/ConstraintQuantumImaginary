@@ -2,11 +2,19 @@ import numpy as np
 from scipy.linalg import expm
 from qiskit.quantum_info import SparsePauliOp
 
+from qiskit.circuit.library import PauliEvolutionGate
+from qiskit.synthesis import LieTrotter
+
+from qiskit import QuantumCircuit
+
 class UnitaryApproximation:
 
-    def __init__(self, basis):
+    def __init__(self, basis, trot):
 
         self.basis = basis
+        self.trot = trot
+
+        self.num_qubits = basis.paulis[0].num_qubits
     
         self.m = basis.size
     
@@ -159,28 +167,121 @@ class UnitaryApproximation:
     
         return b
 
-    def solve(self, S, b):
+    def solve(
+        self,
+        S,
+        b
+    ):
+    
+        return np.linalg.lstsq(
+            S,
+            b,
+            rcond=1e-10
+        )[0]
 
-        M = np.real(S + S.conj().T)
     
-        eigvals, eigvecs = np.linalg.eigh(M)
+    def solve_direction(
+        self,
+        S,
+        b
+    ):
     
-        tol = 1e-12 * np.max(np.abs(eigvals))
-    
-        inv = np.zeros_like(eigvals)
-    
-        mask = eigvals > tol
-    
-        inv[mask] = 1.0 / eigvals[mask]
-    
-        Mplus = (
-            eigvecs
-            @ np.diag(inv)
-            @ eigvecs.T
+        M = np.real(
+            S + S.conj().T
         )
     
-        a = Mplus @ b
+        #
+        # Rayleigh solution
+        #
+        a = np.linalg.lstsq(
+            M,
+            b,
+            rcond=1e-10
+        )[0]
     
-        return np.real(a)
+        #
+        # normalize in M metric
+        #
+        norm = np.sqrt(
+            np.real(
+                a @ M @ a
+            )
+        )
+    
+        if norm < 1e-12:
+    
+            return (
+                np.zeros_like(a),
+                0.0
+            )
+    
+        direction = (
+            a / norm
+        )
+    
+        #
+        # optimal scale gamma
+        #
+        gamma = np.real(
+            direction @ b
+        )
+    
+        return (
+            direction,
+            gamma
+        )
 
+    #Test
+    def build_linear_system(
+        self,
+        measured,
+        g_products
+    ):
     
+        S = self.compute_S(
+            measured
+        )
+    
+        b = self.compute_b(
+            measured,
+            g_products
+        )
+    
+        M = np.real(
+            S + S.conj().T
+        )
+    
+        return M, b
+
+    def build_unitary(self, coeffs, dt):
+    
+        op = None
+    
+        for i, c in enumerate(coeffs):
+    
+            if abs(c) < 1e-12:
+                continue
+    
+            term = c * self.basis.operator(i)
+    
+            if op is None:
+                op = term
+            else:
+                op += term
+    
+        if op is None:
+    
+            return QuantumCircuit(self.num_qubits)
+    
+        qc = QuantumCircuit(self.num_qubits)
+    
+        qc.append(
+            PauliEvolutionGate(
+                op,
+                time=dt,
+                synthesis=LieTrotter(reps=self.trot)
+            ),
+            range(self.num_qubits)
+        )
+    
+        return qc.decompose()
