@@ -16,22 +16,42 @@ class SimulatorBackend:
     def expectation(
         self,
         circuit,
-        operator
+        operator,
+        state=None
     ):
-
+    
+        if state is not None:
+    
+            return np.real(
+                state.expectation_value(operator)
+            )
+    
         result = (
             self.estimator
             .run([(circuit, operator)])
             .result()
         )
-
+    
         return result[0].data.evs
-
+    
+    
     def expectations(
         self,
         circuit,
-        observables
+        observables,
+        state=None
     ):
+    
+        if state is not None:
+    
+            return np.asarray(
+                [
+                    np.real(
+                        state.expectation_value(op)
+                    )
+                    for op in observables
+                ]
+            )
     
         result = (
             self.estimator
@@ -41,9 +61,7 @@ class SimulatorBackend:
             .result()
         )
     
-        values = np.asarray(
+        return np.asarray(
             result[0].data.evs
         ).reshape(-1)
-    
-        return values
     

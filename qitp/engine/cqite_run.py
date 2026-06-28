@@ -5,14 +5,18 @@ def run_qite(
     Mz,
     dt,
     nsteps,
-    state = None
+    state=None
 ):
+
     import numpy as np
+    from tqdm.notebook import tqdm
 
     energies = []
     magnetizations = []
 
-    for _ in range(nsteps):
+    pbar = tqdm(total=nsteps, desc="QITE")
+
+    for step in range(nsteps):
 
         circuit, state = prop.step(
             circuit,
@@ -20,26 +24,46 @@ def run_qite(
             dt
         )
 
-        E = prop.backend.expectation(
-            circuit,
-            H
+        E = np.real(
+            prop.backend.expectation(
+                circuit,
+                H,
+                state
+            )
         )
 
-        energies.append(
-            np.real(E)
+        if isinstance(Mz, (list, tuple)):
+            
+            M = np.real(
+                prop.backend.expectations(
+                    circuit,
+                    Mz,
+                    state
+                )
+            )
+        
+        else:
+                
+            M = np.real(
+                prop.backend.expectation(
+                    circuit,
+                    Mz,
+                    state
+                )
+            )
+
+        energies.append(E)
+        magnetizations.append(M)
+
+        pbar.update(1)
+        pbar.set_postfix_str(
+            f"step {step + 1}/{nsteps}"
         )
 
-        M = prop.backend.expectation(
-            circuit,
-            Mz
-        )
-
-        magnetizations.append(
-            np.real(M)
-        )
+    pbar.close()
 
     return {
         "energies": energies,
         "magnetizations": magnetizations,
-        "circuit": circuit
+        "circuit": circuit,
     }

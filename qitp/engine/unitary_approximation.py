@@ -22,8 +22,12 @@ class UnitaryApproximation:
             [None] * self.m
             for _ in range(self.m)
         ]
+        
+        self.compiled_products = [
+            [None] * self.m
+            for _ in range(self.m)
+        ]
     
-        # insieme di tutte le stringhe di Pauli
         self.observable_cache = {}
         self.observable_labels = set()
     
@@ -32,8 +36,13 @@ class UnitaryApproximation:
             for j in range(self.m):
         
                 op = basis.product(i, j).simplify()
-        
+
                 self.products[i][j] = op
+                
+                self.compiled_products[i][j] = (
+                    tuple(p.to_label() for p in op.paulis),
+                    op.coeffs
+                )
         
                 for pauli in op.paulis:
         
@@ -51,32 +60,43 @@ class UnitaryApproximation:
                         )
 
     def build_measurement_cache(self, G):
-
+    
         labels = set(self.observable_labels)
+    
+        basis = self.basis
+        cache = self.observable_cache
     
         g_products = []
     
         for i in range(self.m):
     
-            P = self.basis.operator(i)
+            op = (G @ basis.operator(i)).simplify()
     
-            op = (G @ P).simplify()
+            compiled = (
+                tuple(p.to_label() for p in op.paulis),
+                op.coeffs
+            )
     
-            g_products.append(op)
+            g_products.append(compiled)
     
-            for pauli in op.paulis:
+            labels.update(compiled[0])
     
-                labels.add(
-                    pauli.to_label()
+        observables = {}
+    
+        for label in labels:
+    
+            obs = cache.get(label)
+    
+            if obs is None:
+    
+                obs = SparsePauliOp(
+                    label,
+                    coeffs=[1.0]
                 )
     
-        observables = {
-            label: SparsePauliOp(
-                label,
-                coeffs=[1.0]
-            )
-            for label in labels
-        }
+                cache[label] = obs
+    
+            observables[label] = obs
     
         return observables, g_products
 
@@ -84,12 +104,11 @@ class UnitaryApproximation:
         self,
         circuit,
         backend,
-        observables
+        observables,
+        state=None
     ):
     
-        labels = list(
-            observables.keys()
-        )
+        labels = list(observables.keys())
     
         ops = [
             observables[label]
@@ -98,42 +117,32 @@ class UnitaryApproximation:
     
         values = backend.expectations(
             circuit,
-            ops
+            ops,
+            state
         )
     
-        return dict(
-            zip(labels, values)
-        )
+        return dict(zip(labels, values))
 
-    def compute_S(
-        self,
-        measured
-    ):
+    def compute_S(self, measured):
     
-        S = np.zeros(
-            (self.m, self.m),
-            dtype=complex
-        )
+        m = self.m
+        compiled = self.compiled_products
+        get = measured.__getitem__
     
-        for i in range(self.m):
+        S = np.empty((m, m), dtype=complex)
     
-            for j in range(self.m):
+        for i in range(m):
     
-                op = self.products[i][j]
+            row = compiled[i]
+    
+            for j in range(m):
+    
+                labels, coeffs = row[j]
     
                 value = 0.0j
     
-                for pauli, coeff in zip(
-                    op.paulis,
-                    op.coeffs
-                ):
-    
-                    value += (
-                        coeff
-                        * measured[
-                            pauli.to_label()
-                        ]
-                    )
+                for label, coeff in zip(labels, coeffs):
+                    value += coeff * get(label)
     
                 S[i, j] = value
     
@@ -145,25 +154,21 @@ class UnitaryApproximation:
         g_products
     ):
     
-        b = np.zeros(self.m)
+        m = self.m
+        get = measured.__getitem__
     
-        for i, op in enumerate(g_products):
+        b = np.empty(m)
+    
+        for i in range(m):
+    
+            labels, coeffs = g_products[i]
     
             value = 0.0j
     
-            for pauli, coeff in zip(
-                op.paulis,
-                op.coeffs
-            ):
+            for label, coeff in zip(labels, coeffs):
+                value += coeff * get(label)
     
-                value += (
-                    coeff
-                    * measured[
-                        pauli.to_label()
-                    ]
-                )
-    
-            b[i] = -2.0 * np.imag(value)
+            b[i] = -2.0 * value.imag
     
         return b
 
@@ -255,22 +260,9 @@ class UnitaryApproximation:
 
     def build_unitary(self, coeffs, dt):
     
-        op = None
-    
-        for i, c in enumerate(coeffs):
-    
-            if abs(c) < 1e-12:
-                continue
-    
-            term = c * self.basis.operator(i)
-    
-            if op is None:
-                op = term
-            else:
-                op += term
+        op = self._build_operator(coeffs)
     
         if op is None:
-    
             return QuantumCircuit(self.num_qubits)
     
         qc = QuantumCircuit(self.num_qubits)
@@ -285,3 +277,43 @@ class UnitaryApproximation:
         )
     
         return qc.decompose()
+
+    def _build_operator(self, coeffs):
+
+        op = None
+    
+        for i, c in enumerate(coeffs):
+    
+            if abs(c) < 1e-12:
+                continue
+    
+            term = c * self.basis.operator(i)
+    
+            if op is None:
+                op = term
+            else:
+                op += term
+    
+        return op
+
+    
+    
+    def build_operator(self, coeffs, dt):
+        from scipy.linalg import expm
+        from qiskit.quantum_info import Operator
+    
+        op = self._build_operator(coeffs)
+    
+        if op is None:
+            return Operator(
+                np.eye(
+                    2**self.num_qubits,
+                    dtype=complex
+                )
+            )
+    
+        return Operator(
+            expm(
+                -1j * dt * op.to_matrix()
+            )
+        )
