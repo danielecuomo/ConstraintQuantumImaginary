@@ -8,13 +8,15 @@ import time
 
 class QITEPropagation:
 
-    def __init__(self, hamiltonian, backend, approx):
+    def __init__(self, hamiltonian, constraints, backend, approx):
 
         self.H = hamiltonian
         self.approx = approx
         self.backend = backend
         
-        self.constraints = []
+        self.constraints = constraints
+        identity = ["I"] * hamiltonian.num_qubits
+        self.constraints.extend(SparsePauliOp("".join(identity), 1.0))
         self.targets = []
 
         self.num_qubits = hamiltonian.num_qubits

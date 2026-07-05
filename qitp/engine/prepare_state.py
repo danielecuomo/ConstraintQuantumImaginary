@@ -158,7 +158,7 @@ def constraint_rotation(
         "b":
             b
     }
-    
+
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import (
     PauliEvolutionGate

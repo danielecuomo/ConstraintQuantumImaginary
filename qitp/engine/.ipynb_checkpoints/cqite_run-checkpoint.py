@@ -1,4 +1,4 @@
-def run_qite(
+def cqite_cycle(
     prop,
     circuit,
     H,
@@ -64,6 +64,111 @@ def run_qite(
 
     return {
         "energies": energies,
-        "magnetizations": magnetizations,
+        "magnetizations": magnetizations[:-1],
         "circuit": circuit,
+        "state": state
     }
+
+
+
+from qitp.engine.prepare_state import constraint_rotation, prepare_state, density_from_rotations, support_only
+from qitp.ansatz.commutator_basis import CommutatorBasis
+from qitp.engine.unitary_approximation import UnitaryApproximation
+from qiskit.quantum_info import Statevector, SparsePauliOp
+from qitp.engine.propagation import QITEPropagation
+
+def cqite(
+    H,
+    C,
+    target,
+    degree,
+    depth,
+    trot,
+    dt,
+    nsteps,
+    backend
+):
+    #
+    # Step 1
+    #
+
+    rotations = [
+        constraint_rotation(
+            c,
+            target,
+        )
+        for c in C
+    ]
+
+    #
+    # Step 2
+    #
+
+    rho = density_from_rotations(
+        H.num_qubits,
+        rotations,
+        degree=degree,
+    )
+
+    seeds = support_only(rho)
+
+    basis = CommutatorBasis.from_seed(
+        hamiltonian=H,
+        seeds=seeds,
+        depth=depth,
+    )
+
+    #
+    # Step 3
+    #
+
+    approx = UnitaryApproximation(
+        basis,
+        trot=trot,
+    )
+
+    #
+    # Step 4
+    #
+
+    prop = QITEPropagation(
+        H,
+        C,
+        backend,
+        approx,
+    )
+
+    #
+    # Step 5
+    #
+
+    circuit = prepare_state(
+        H.num_qubits,
+        rotations,
+    )
+    
+    circuit = circuit.decompose()
+
+    #
+    # Step 6
+    #
+
+    psi = Statevector.from_instruction(
+        circuit
+    )
+
+    #
+    # Step 7
+    #
+
+    results = cqite_cycle(
+        prop,
+        None,
+        H,
+        C,
+        dt,
+        nsteps,
+        state=psi,
+    )
+
+    return results
