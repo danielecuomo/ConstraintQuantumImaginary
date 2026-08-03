@@ -14,9 +14,17 @@ class QITEPropagation:
         self.approx = approx
         self.backend = backend
         
-        self.constraints = constraints
-        identity = ["I"] * hamiltonian.num_qubits
-        self.constraints.extend(SparsePauliOp("".join(identity), 1.0))
+        if isinstance(constraints, SparsePauliOp):
+            self.constraints = [constraints]
+        else:
+            self.constraints = list(constraints)
+        
+        identity = SparsePauliOp(
+            "I"*hamiltonian.num_qubits,
+            coeffs=[1.0]
+        )
+        
+        self.constraints.append(identity)
         self.targets = []
 
         self.num_qubits = hamiltonian.num_qubits
