@@ -3,3 +3,6 @@ qiskit-aer
 numpy
 scipy
 matplotlib
+tqdm
+jupyterlab
+ipykernel

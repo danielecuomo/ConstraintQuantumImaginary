@@ -230,11 +230,11 @@ def zero_density_pauli(nqubits):
 
 def conjugate_pauli_rotation(op, generator, theta):
     """
-    Applica
+    Applies
 
         op -> exp(-i theta P) op exp(+i theta P)
 
-    dove generator = P è un singolo termine Pauli.
+    where generator = P is a single Pauli term.
     """
 
     P = generator.paulis[0]
@@ -282,11 +282,11 @@ def density_from_rotations(
     degree=None
 ):
     """
-    Costruisce
+    Builds
 
         rho ~= Π_i (I + A_i)
 
-    troncata al grado 'degree'.
+    truncated at degree 'degree'.
 
     degree = 0:
         I
@@ -304,7 +304,7 @@ def density_from_rotations(
     """
 
     #
-    # Costruisci i constraint vestiti
+    # Build the dressed constraints
     #
 
     dressed = []
@@ -337,7 +337,7 @@ def density_from_rotations(
     degree = min(degree, m)
 
     #
-    # Termine identità
+    # Identity term
     #
 
     rho = SparsePauliOp(
@@ -346,7 +346,7 @@ def density_from_rotations(
     )
 
     #
-    # Ordini 1..degree
+    # Orders 1..degree
     #
 
     for order in range(1, degree + 1):
@@ -364,7 +364,7 @@ def density_from_rotations(
             rho = (rho + term).simplify()
 
     #
-    # Normalizzazione come density operator
+    # Normalize as a density operator
     #
 
     rho = rho / (2 ** nqubits)

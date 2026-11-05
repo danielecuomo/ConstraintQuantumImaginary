@@ -138,7 +138,7 @@ class QITEPropagation:
         constraints = self.constraints
     
         #
-        # Costruzione operatori
+        # Build operators
         #
     
         for i, Bi in enumerate(constraints):
@@ -160,7 +160,7 @@ class QITEPropagation:
                     add_label(pauli.to_label())
     
         #
-        # Misura
+        # Measure observables
         #
     
         cache = getattr(self.approx, "observable_cache", {})
@@ -263,5 +263,3 @@ class QITEPropagation:
         )
     
         return G.to_matrix()
-
-    

@@ -41,6 +41,20 @@ class CommutatorBasis(OperatorBasis):
         return CommutatorBasis.clean(-1j * C)
 
     @staticmethod
+    def anticommutator(A, B):
+
+
+        C = (A @ B) + (B @ A)
+        C = C.simplify()
+
+
+        if len(C.paulis) == 0:
+            return None
+
+
+        return CommutatorBasis.clean(C)
+
+    @staticmethod
     def canonical(op):
 
         op = op.simplify()
@@ -86,7 +100,7 @@ class CommutatorBasis(OperatorBasis):
             frontier.append(op)
     
         #
-        # commutator hierarchy
+        # anticommutator hierarchy
         #
     
         for _ in range(depth):
@@ -95,21 +109,27 @@ class CommutatorBasis(OperatorBasis):
     
             for op in frontier:
     
-                comm = cls.commutator(
+                comm = cls.anticommutator(
                     hamiltonian,
                     op
                 )
-                coeff_norm = np.linalg.norm(comm.coeffs)
-                
-                if coeff_norm > 1e-12:
-                    comm = SparsePauliOp(
-                        comm.paulis,
-                        coeffs=comm.coeffs / coeff_norm
-                    )
     
                 if comm is None:
                     continue
     
+                coeff_norm = np.linalg.norm(comm.coeffs)
+
+
+                if coeff_norm <= 1e-12:
+                    continue
+
+
+                comm = SparsePauliOp(
+                    comm.paulis,
+                    coeffs=comm.coeffs / coeff_norm
+                )
+
+
                 comm = cls.clean(comm)
     
                 if not cls.linearly_independent(
@@ -163,14 +183,14 @@ class CommutatorBasis(OperatorBasis):
         PA = (operator @ generator).simplify()
     
         #
-        # commutano
+        # commute
         #
     
         if AP == PA:
             return operator
     
         #
-        # anticommutano
+        # anticommute
         #
     
         return CommutatorBasis.clean(
@@ -316,5 +336,3 @@ class CommutatorBasis(OperatorBasis):
             op.paulis,
             coeffs=np.real(op.coeffs)
         ).simplify()
-
-    
