@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "Constrained Quantum Imaginary Time Evolution"
+authors:
+  - family-names: Cuomo
+    given-names: Daniele
+  - family-names: Cort Barrada
+    given-names: Luis
+  - family-names: Studziński
+    given-names: Michał
+  - family-names: van Leeuwen
+    given-names: Robert
+repository-code: "https://github.com/danielecuomo/ConstraintQuantumImaginary"
+preferred-citation:
+  type: article
+  title: "Constrained Quantum Imaginary Time in Krylov Space"
+  authors:
+    - family-names: Cuomo
+      given-names: Daniele
+    - family-names: Cort Barrada
+      given-names: Luis
+    - family-names: Studziński
+      given-names: Michał
+    - family-names: van Leeuwen
+      given-names: Robert
+  year: 2026
+  doi: "10.48550/arXiv.2611.07800"
+  url: "https://arxiv.org/abs/2611.07800"
