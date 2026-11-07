@@ -1,5 +1,7 @@
 # Constrained Quantum Imaginary Time Evolution
 
+[![DOI](https://img.shields.io/badge/DOI-10.48550%2FarXiv.2611.07800-blue)](https://doi.org/10.48550/arXiv.2611.07800)
+
 This repository contains a research implementation of constrained quantum imaginary time evolution (CQITE). It advances quantum states toward low-energy states while enforcing expectation-value constraints through unitary updates.
 
 The code uses Qiskit and Aer for Pauli-operator manipulation and statevector simulation. The notebooks provide validation cases and comparisons with constrained imaginary-time evolution results for small spin systems and graph-based density-functional examples.
